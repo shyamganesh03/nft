@@ -1,0 +1,22 @@
+#pragma version 4
+
+arg_0
+len
+int 58
+==
+bnz asset
+
+asset:
+arg_1
+len
+int 0
+>
+bnz asseturl
+
+asseturl:
+arg_2
+len
+int 10
+>
+result:
+int 1

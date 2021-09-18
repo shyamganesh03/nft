@@ -1,0 +1,20 @@
+
+.b1 {
+ height:50px;
+ width:100px;
+ color: orange;
+ background-color:blue;
+ border-radius: 20px;
+ border: none;
+}
+
+table{
+  margin-top: 20%;
+}
+
+.inf{
+  color:orange;
+  font-weight: bold;
+  font-size:small;
+}
+

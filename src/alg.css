@@ -1,0 +1,15 @@
+div {
+   position: relative;
+   top: 100px;
+   left: 15%;
+}
+
+button{
+    color:orange;
+    background-color:blue;
+    height:40px;
+    margin-left: 15px;
+    border-radius: 20px;
+    border-color: orange;
+    cursor: pointer;
+}
