@@ -68,15 +68,16 @@ import './alg.css';
 async function create(assetName){
     const nftdata =await fetch(`https://nft-app-ec882-default-rtdb.firebaseio.com/NFT/${name}.json`,);
     const resdata =await nftdata.json();
-    
+    const array = [];
+    array.push(resdata['Image_url'].split('/'));
     let params = await algodclient.getTransactionParams().do();
     params.fee = 100;
     params.flatFee = true;
     const program = new Uint8Array(Buffer.from('ASAEADoKAS0VIhJAACIvFSISQAAVLRUjEkAAAC4VIg1AAAAvFSQNQAAGLS4TQAAAJQ==', "base64"));
     const args=[];
-    args.push([...Buffer.from(resdata['Wallet'])]);
+    args.push([...Buffer.from(resdata['WalletAddress'])]);
     args.push([...Buffer.from(assetName)]);
-    args.push([...Buffer.from(resdata['Image_url'])]);
+    args.push([...Buffer.from(array[0][7])]);
     args.push([...Buffer.from('')]);
     let lsig = algosdk.makeLogicSig(program,args);
     const addrc = lsig.address();
@@ -89,7 +90,7 @@ async function create(assetName){
     
     let txn = algosdk.makeAssetCreateTxnWithSuggestedParams(lsig.address(), note,
          totalIssuance, decimals, defaultFrozen, addrc, addrc,addrc,
-        addrc, unitName, assetName, resdata['Image_url'], assetMetadataHash, params);
+        addrc, unitName, assetName, array[0][7], assetMetadataHash, params);
     
          let rawSignedTxn = algosdk.signLogicSigTransaction(txn, lsig).blob;
         console.log('result: '+ rawSignedTxn);
@@ -99,7 +100,7 @@ async function create(assetName){
     let assetID = ptx["asset-index"];
     await printCreatedAsset(algodclient,lsig.address(), assetID);
     await printAssetHolding(algodclient,lsig.address(), assetID);
-    await transfer(lsig.address(),resdata['Wallet'],assetID);
+    await transfer(lsig.address(),resdata['WalletAddress'],assetID);
     await  fetch(`https://nft-app-ec882-default-rtdb.firebaseio.com/NFT/${name}.json`,
     {
       method:'PATCH',
@@ -125,6 +126,9 @@ async function transfer(addr1,addr2,id){
         addr2 = prompt("ENTER WALLET ADDRESS IN WHICH YOU NEED TO SEND YOUR NFT");
        console.log(addr2);
     }
+    if(id === ''){
+        id = parseInt(resdata['Token']);
+    }
     let program = new Uint8Array(Buffer.from("ASAEADoKAS0VIhJAACIvFSISQAAVLRUjEkAAAC4VIg1AAAAvFSQNQAAGLS4TQAAAJQ==", "base64"));
     const args=[];
     args.push([...Buffer.from(addr1)]);
@@ -138,37 +142,28 @@ async function transfer(addr1,addr2,id){
       let revocationTarget = undefined;
      let closeRemainderTo = undefined;
        let  amount = 0;
-    let note = undefined;
+       let note = undefined;
+       let opttxn = algosdk.makeAssetTransferTxnWithSuggestedParams(lsig.address(), addr2, closeRemainderTo, revocationTarget,
+      amount, note, id, params);
   
-       let opttxn = algosdk.makeAssetTransferTxnWithSuggestedParams(addr1, addr2, closeRemainderTo, revocationTarget,
-            amount, note, id, params);
-        
-       let rawSignedTxn = algosdk.signLogicSigTransaction(opttxn,lsig).blob;
-      let opttx = (await algodclient.sendRawTransaction(rawSignedTxn).do());
-      console.log("Transaction : " + opttx.txId);
-      
-      await waitForConfirmation(algodclient, opttx.txId);
-      let opttxn2 = algosdk.makeAssetTransferTxnWithSuggestedParams(addr2, addr2, closeRemainderTo, revocationTarget,
-          1, note, id, params);
-     
-     let rawSignedTxn2 = algosdk.signLogicSigTransaction(opttxn2,lsig).blob;
-    let opttx2 = (await algodclient.sendRawTransaction(rawSignedTxn2).do());
-    console.log("Transaction : " + opttx2.txId);
-    
-    await waitForConfirmation(algodclient, opttx2.txId);
-     let manager = addr2;
+ let rawSignedTxn = algosdk.signLogicSigTransaction(opttxn,lsig).blob;
+let opttx = (await algodclient.sendRawTransaction(rawSignedTxn).do());
+console.log("Transaction : " + opttx.txId);
+await waitForConfirmation(algodclient, opttx.txId);
+     let manager = lsig.address();
      let reserve = addr2;
      let freeze = addr2;
      let clawback = addr2;
-      let ctxn = algosdk.makeAssetConfigTxnWithSuggestedParams(addr1, note, 
+      let ctxn = algosdk.makeAssetConfigTxnWithSuggestedParams(lsig.address(), note, 
       id, manager, reserve, freeze, clawback, params);
+      
   
       rawSignedTxn = algosdk.signLogicSigTransaction(ctxn,lsig).blob;
       let ctx = (await algodclient.sendRawTransaction(rawSignedTxn).do());
-      console.log("Transaction : " + ctx.txId);
-    
+      console.log("Transaction2 : " + ctx.txId);
       await waitForConfirmation(algodclient, ctx.txId);
       await printCreatedAsset(algodclient,addr1, id);
+      
       await fetch(`https://nft-app-ec882-default-rtdb.firebaseio.com/NFT/${name}.json`,
       {
         method:'PATCH',
@@ -207,32 +202,40 @@ async function transfer(addr1,addr2,id){
             bigamount = a2response.transactions.amount;
             smallamount = algosdk.algosToMicroalgos(parseInt(resdata['Price']));
         }
+        else if(a2response.transactions.amount < algosdk.algosToMicroalgos(parseInt(resdata['Price']))){
+           bigamount =a2response.transactions.amount;
+           smallamount = 0;
+        }
         else{
             bigamount = algosdk.algosToMicroalgos(parseInt(resdata['Price']));
             smallamount = a2response.transactions.amount;
         }
         let balance = bigamount - smallamount;
-       await buy2(lsig.address(),resdata2['algorand_address'],balance,lsig);
+        smallamount !== 0 ?
+       await buy2(lsig.address(),resdata2['algorand_address'],balance,lsig,true): await buy2(lsig.address(),resdata2['algorand_address'],balance,lsig,false);
            }
+           
    else{
-       await buy2(lsig.address(),resdata['WalletAddress'],algosdk.algosToMicroalgos(parseInt(resdata['Price'])),lsig);
-   }
-    
-      await transfer(resdata['WalletAddress'],resdata2['algorand_address'],resdata['Token']);
-      await fetch(`https://nft-app-ec882-default-rtdb.firebaseio.com/NFT/${name}.json`,
-      {
-        method:'PATCH',
-        headers:{
-          'CONTENT-TYPE': 'application/json',
-        },
-        body:JSON.stringify({
-         'buyed': 'true'
-        })
-      }
-      );
+       await buy2(lsig.address(),resdata['WalletAddress'],algosdk.algosToMicroalgos(parseInt(resdata['Price'])),lsig,true);
+   
+       await transfer(resdata['WalletAddress'],resdata2['algorand_address'],resdata['Token']);
+       await fetch(`https://nft-app-ec882-default-rtdb.firebaseio.com/NFT/${name}.json`,
+       {
+         method:'PATCH',
+         headers:{
+           'CONTENT-TYPE': 'application/json',
+         },
+         body:JSON.stringify({
+          'buyed': 'true'
+         })
+       }
+       );
+    }
+        
+      
     }
   }
-  async function buy2(a1,a2,amount,lis){
+  async function buy2(a1,a2,amount,lis,b){
     let  params = await algodclient.getTransactionParams().do();
     params.fee = 1000;
   params.flatFee = true;
@@ -266,6 +269,7 @@ async function transfer(addr1,addr2,id){
             currentround++;
         }
     }
+    if(b===true){
     let txn = algosdk.makePaymentTxnWithSuggestedParams(a1,a2,amount,undefined,undefined,params);
      
     let signedTxn = algosdk.signLogicSigTransaction(txn,lis);
@@ -282,10 +286,14 @@ await algodclient.sendRawTransaction(signedTxn.blob).do();
         var string = new TextDecoder().decode(confirmedTxn.txn.txn.note);
         console.log("Note field: ", string);
   }
+  else{
+      alert('PLEASE SEND AN CORRECT AMMOUNT TO BYE NFT');
+  }
+}
     return(<div>
         
      <button onClick={()=>create(name)}>CREATE</button>
-     <button onClick={()=>{transfer('','')}}>TRANSFER</button>
+     <button onClick={()=>{transfer('','','')}}>TRANSFER</button>
     </div>);
 }
 
